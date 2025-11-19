@@ -1,6 +1,5 @@
-import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { PromptHistory } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,12 +23,25 @@ import {
 export default function History() {
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: history, isLoading, refetch } = useQuery({
-    queryKey: ['promptHistory'],
-    queryFn: () => base44.entities.PromptHistory.list("-created_date"),
-    initialData: [],
-  });
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    setIsLoading(true);
+    try {
+      const data = await PromptHistory.list();
+      setHistory(data);
+    } catch (error) {
+      console.error("Error loading history:", error);
+      toast.error("履歴の読み込みに失敗しました");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleCopy = (text, id) => {
     navigator.clipboard.writeText(text);
@@ -40,17 +52,18 @@ export default function History() {
 
   const handleDelete = async (id) => {
     try {
-      await base44.entities.PromptHistory.delete(id);
+      await PromptHistory.delete(id);
       toast.success("削除しました");
-      refetch();
+      loadHistory();
     } catch (error) {
       toast.error("削除に失敗しました");
     }
   };
 
-  const filteredHistory = history.filter(item =>
-    item.original_question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.optimized_prompt?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredHistory = history.filter(
+    (item) =>
+      item.original_question?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.optimized_prompt?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -58,9 +71,9 @@ export default function History() {
       <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-sky-600 rounded-xl flex items-center justify-center">
-                <HistoryIcon className="w-5 h-5 text-white" />
-              </div>
+            <div className="w-10 h-10 bg-sky-600 rounded-xl flex items-center justify-center">
+              <HistoryIcon className="w-5 h-5 text-white" />
+            </div>
             <div>
               <h1 className="text-3xl font-bold text-slate-900">履歴</h1>
               <p className="text-slate-600">過去に変換した質問を確認できます</p>
@@ -91,20 +104,27 @@ export default function History() {
                 {searchQuery ? "該当する履歴が見つかりません" : "まだ履歴がありません"}
               </h3>
               <p className="text-slate-600">
-                {searchQuery ? "別のキーワードで検索してみてください" : "質問を最適化すると、ここに履歴が表示されます"}
+                {searchQuery
+                  ? "別のキーワードで検索してみてください"
+                  : "質問を最適化すると、ここに履歴が表示されます"}
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-4">
             {filteredHistory.map((item) => (
-              <Card key={item.id} className="shadow-lg border-none bg-white/80 backdrop-blur-sm hover:shadow-xl transition-shadow">
+              <Card
+                key={item.id}
+                className="shadow-lg border-none bg-white/80 backdrop-blur-sm hover:shadow-xl transition-shadow"
+              >
                 <CardHeader className="border-b border-slate-100">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-sm text-slate-500">
-                          {format(new Date(item.created_date), "yyyy年MM月dd日 HH:mm", { locale: ja })}
+                          {format(new Date(item.created_date), "yyyy年MM月dd日 HH:mm", {
+                            locale: ja,
+                          })}
                         </span>
                         {item.persona && (
                           <Badge variant="secondary" className="bg-sky-100 text-sky-700">
@@ -123,7 +143,11 @@ export default function History() {
                     </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-600">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-slate-400 hover:text-red-600"
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -136,7 +160,10 @@ export default function History() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(item.id)} className="bg-red-600 hover:bg-red-700">
+                          <AlertDialogAction
+                            onClick={() => handleDelete(item.id)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
                             削除
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -147,7 +174,9 @@ export default function History() {
                 <CardContent className="pt-6">
                   <div className="bg-slate-50 rounded-lg p-4 mb-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-slate-700">最適化されたプロンプト</span>
+                      <span className="text-sm font-medium text-slate-700">
+                        最適化されたプロンプト
+                      </span>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -171,22 +200,6 @@ export default function History() {
                       {item.optimized_prompt}
                     </p>
                   </div>
-                  {item.options && (
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline" className="text-xs">
-                        文体: {getOptionLabel('tone', item.options.tone)}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        長さ: {getOptionLabel('length', item.options.length)}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        形式: {getOptionLabel('format', item.options.format)}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        アイデア数: {item.options.idea_count}個
-                      </Badge>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             ))}
@@ -195,26 +208,4 @@ export default function History() {
       </div>
     </div>
   );
-}
-
-function getOptionLabel(type, value) {
-  const labels = {
-    tone: {
-      friendly: "優しい",
-      balanced: "バランス",
-      formal: "フォーマル",
-      strict: "厳しい"
-    },
-    length: {
-      short: "短め",
-      medium: "普通",
-      long: "長め"
-    },
-    format: {
-      paragraph: "文章",
-      bullet: "箇条書き",
-      step: "ステップ"
-    }
-  };
-  return labels[type]?.[value] || value;
 }
